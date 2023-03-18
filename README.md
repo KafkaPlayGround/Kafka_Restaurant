@@ -133,3 +133,85 @@ new_partition.json --bootstrap-server localhost:9092
 - 처리중인 데이터 규모에 따라 Partition 재 배치에 따른 네트워크 사용량과 CPU 사용량 증가에 따른 임팩트가 있을 수 있음
 - 따라서, 상대적으로 사용량이 작은 시간을 이요하는 것이 바람직
 - 상황에 따라 임시로 retention을 작게 설정하거나, topic을 나눠서 실행해서 부하를 감소시키는 방안을 고려할 수 있음.
+
+---
+
+## 인증 추가하기 (SASL)
+
+### Kafka SASL (Simple Authentication and Security Layer) 인증 종류
+
+- `SASL/PLAIN` : 간단하게 사용자 이름과 암호를 사용하여 인증
+- `SASL/SCRAM` : SCRAM(Salted Challenge Response Authentication Mechanism) 메커니즘을 사용하는 SASL - PLAIN보다 개선된 보안 제공
+- `SASL/GSSAPI` : 커버로스 인증서버를 이용하여 인증
+- `SASL/OAUTHBEARER` : OAUTH BEARER 메커니즘을 사용하는 JWT(JSON 웹 토큰)를 사용하여 인증 - Non-production용
+
+### `SASL?SCRAM`
+
+1. 주키퍼 실행시킨 후 주키퍼에 Broker간 통신에 사용할 credential(인증 정보) 생성
+
+```bash
+bin/kafka-configs.sh --zookeeper localhost:2181 --alter --add-config
+'SCRAM-SHA-256=[iterations=8192, password=admin-password]' --entity-type users --entity-name admin
+```
+
+2. 주키퍼에 Producer/Consumer에서 사용할 Credential(인증 정보) 생성
+
+```bash
+bin/kafka-configs.sh --zookeeper localhost:2181 --alter --add-config
+'SCRAM-SHA-256=[iterations=8192, password=password]' --entity-type users --entity-name username
+```
+
+3. JAAS(Java Authentication and Authorization Service) config에 Broker용 인증정보 설정
+
+```properties
+KafkaServer{
+    org.apache.kafka.common.security.scram.ScarmLoginModule required
+    username="admin"
+    password="admin-password";
+}
+```
+
+4. Kafka Broker Config(server.properties)에 인증정보 설정
+
+```properties
+listeners = SASL PLAINTEXT://localhost:9092
+security.inter.broker.protocol=SASL PLAINTEXT
+sasl.mechanism.inter.broker.protocol=SCRAM-SAH-256
+sasl.enabled.machanisms=SCRAM-SHA-256
+```
+
+5. Kafka Broker 실행시 JAAS Config를 사용하도록 kafka_server_jaas.conf 파일 경로를 KAFKA_OPTS 옵션에 추가한 후 kafka broker 실행
+
+```bash
+export KAFKA_OPTS="-Djava.security.auth.login.config=/kafka_2.13-2.8.2/config/kafka_server_jaas.conf"
+```
+
+6-1 Java Producer의 Proeprties에 SASL/SCRAM 인증 정보를 추가하여 실행 확인
+
+```Java
+...
+Properties configs = new Properties();
+...
+configs.put("security.protocol" , "SASL_PLAINTEXT");
+configs.put("sasl.mechanism", "SCRAM-SHA-256");
+configs.put("sasl.jaas.config", "org.apache.kafka.common.security.scram.ScramLoginModule required
+username='alice' password='alice-password';");
+
+KafkaProducer<String,String> producer = new KafkaProducer<>(configs);
+...
+```
+
+6-2 또는, Producer 쪽에 SASL/SCRAM 인증정보를 별도의 파일로 만들어 놓고 실행할 수도 있음(producer.properties
+
+```properties
+security.protocol = SASL_PLAINTEXT
+sasl.mechanism=SCRAM-SHA-256
+sasl.jaas.config= org.apache.kafka.common.security.scram.ScramLoginModule required
+username='alice' password='alice-password
+```
+
+6-2 현재 Kafka Broker에서는 인증을 요구하고 있으므로 아래와 같이 CLI 호출 시 인증정보를 포함하여 호출한다
+
+```bash
+bin/kafka-console-producer.sh --topic topic5 --bootstrap-server localhost:9092 --producer.config ./producer.properties
+```
