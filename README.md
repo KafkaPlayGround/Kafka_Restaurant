@@ -215,3 +215,67 @@ username='alice' password='alice-password
 ```bash
 bin/kafka-console-producer.sh --topic topic5 --bootstrap-server localhost:9092 --producer.config ./producer.properties
 ```
+
+---
+
+## 클러스터 마이그레이션하기
+
+### Cluster Migration
+
+1. 서비스 임팩트를 최소화하고 데이터 유실에 대한 문제가 발생하지 않도록 사전에 Publisher/Consumer 측과 인터뷰를 통해
+
+    세부적인 마이그레이션 작업 계획 및 롤백 계획 작성
+2. 새로운 Zookeeper, Kafka Cluster 생성 및 방화벽 작업 등 네트워크, 필요한 보안 프로세스 실행
+3. 데이터 마이그레이션 실행 - 1번의 계획에 따라 아래의 방법 중 선택하거나 여러 방법을 조합할 수도 있음
+
+    a. 신규 Cluster용 Broker를 기존 Cluster에 추가하고, partition을 reassign한후, 기존 Cluster를 shutdown
+    
+    b. MirrorMaker2를 세팅하여 기존 Cluster에서 새로운 Cluster로 실시간으로 데이터를 동기화하는 방법
+    
+    c. Kafka Connect 등을 이용해서 기존 Cluster에서 새로운 Cluster로 재전송하는 방법
+    
+    d. application 레벨에서 두개의 Kafka Cluster에 Dual Write/Dual Read등으로 처리하는 방법
+
+4. Producer/Consumer Application의 Endpoint 변경
+5. 최종 검증 및 마이그레이션 종료, 면밀히 모니터링하여 롤백에 대해 대비
+
+### MirrorMaker2 실행 설정
+
+![image](https://user-images.githubusercontent.com/40031858/226334509-b1215165-27fc-41b0-afdf-23afd256e105.png)
+
+---
+
+## Kafka Monitoring Tool
+
+1. CMAK(Kafka Manager) - by yahoo. Managing Cluster, Topic, Offset
+    
+    a. https://github.com/yahoo/CMAK
+
+2. Burrow - by linkedin. focusing lag of offset
+
+    a. https://github.com/linkedin/Burrow
+
+3. Xinfra Monitor(Kafka Monitor) - by linkedin
+
+    a. https://github.com/linkedin/kafka-monitor
+
+4. Cruise Control - by linkedin
+
+    a. https://github.com/linkedin/cruise-control
+
+5. Exporter + Prmoetheus + Grafana
+
+    a. https://github.com/prometheus/jmx_exporter
+
+    b. https://github.com/danielqsj/kafka_exporter
+
+    c. https://github.com/prometheus/node_exporter
+
+    d. https://prometheus.io/
+
+    e. https://grafana.com/
+
+### Kafka exporter + Prmetheus + Grafana 
+
+![image](https://user-images.githubusercontent.com/40031858/226337208-51db6cb3-e4cd-40b1-920b-5815a63524ef.png)
+
